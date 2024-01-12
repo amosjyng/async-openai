@@ -19,7 +19,8 @@ use crate::{
 /// Client is a container for config, backoff and http_client
 /// used to make API calls.
 pub struct Client<C: Config> {
-    http_client: reqwest::Client,
+    http_client: reqwest_middleware::ClientWithMiddleware,
+    streaming_http_client: reqwest::Client,
     config: C,
     backoff: backoff::ExponentialBackoff,
 }
@@ -28,7 +29,10 @@ impl Client<OpenAIConfig> {
     /// Client with default [OpenAIConfig]
     pub fn new() -> Self {
         Self {
-            http_client: reqwest::Client::new(),
+            http_client: reqwest_middleware::ClientBuilder::new(
+                reqwest::Client::new(),
+            ).build(),
+            streaming_http_client: reqwest::Client::new(),
             config: OpenAIConfig::default(),
             backoff: Default::default(),
         }
@@ -39,7 +43,10 @@ impl<C: Config> Client<C> {
     /// Create client with [OpenAIConfig] or [crate::config::AzureConfig]
     pub fn with_config(config: C) -> Self {
         Self {
-            http_client: reqwest::Client::new(),
+            http_client: reqwest_middleware::ClientBuilder::new(
+                reqwest::Client::new(),
+            ).build(),
+            streaming_http_client: reqwest::Client::new(),
             config,
             backoff: Default::default(),
         }
@@ -47,8 +54,8 @@ impl<C: Config> Client<C> {
 
     /// Provide your own [client] to make HTTP requests with.
     ///
-    /// [client]: reqwest::Client
-    pub fn with_http_client(mut self, http_client: reqwest::Client) -> Self {
+    /// [client]: reqwest_middleware::ClientWithMiddleware
+    pub fn with_http_client(mut self, http_client: reqwest_middleware::ClientWithMiddleware) -> Self {
         self.http_client = http_client;
         self
     }
@@ -259,7 +266,7 @@ impl<C: Config> Client<C> {
             let response = client
                 .execute(request)
                 .await
-                .map_err(OpenAIError::Reqwest)
+                .map_err(OpenAIError::ReqwestMiddleware)
                 .map_err(backoff::Error::Permanent)?;
 
             let status = response.status();
@@ -328,7 +335,7 @@ impl<C: Config> Client<C> {
         O: DeserializeOwned + std::marker::Send + 'static,
     {
         let event_source = self
-            .http_client
+            .streaming_http_client
             .post(self.config.url(path))
             .query(&self.config.query())
             .headers(self.config.headers())
@@ -350,7 +357,7 @@ impl<C: Config> Client<C> {
         O: DeserializeOwned + std::marker::Send + 'static,
     {
         let event_source = self
-            .http_client
+            .streaming_http_client
             .get(self.config.url(path))
             .query(query)
             .query(&self.config.query())

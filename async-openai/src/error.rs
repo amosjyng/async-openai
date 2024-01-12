@@ -6,6 +6,8 @@ pub enum OpenAIError {
     /// Underlying error from reqwest library after an API call was made
     #[error("http error: {0}")]
     Reqwest(#[from] reqwest::Error),
+    #[error("http error: {0}")]
+    ReqwestMiddleware(#[from] reqwest_middleware::Error),
     /// OpenAI returns error object with details of API call failure
     #[error("{:?}: {}", .0.r#type, .0.message)]
     ApiError(ApiError),
